@@ -62,6 +62,7 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 			goInterface := GoInterface{
 				Filename: filename,
 				Methods:  []string{},
+				Bases:    []string{},
 			}
 			typeSpecNode := typeDeclNode.NamedChild(0)
 
@@ -79,12 +80,15 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 			typeNode := typeSpecNode.NamedChild(1)
 			for j := range typeNode.NamedChildCount() {
 				methodNode := typeNode.NamedChild(int(j))
-				if methodNode.Type() != "method_spec" {
-					continue
-				}
-				methodName := methodNode.NamedChild(0).Content(sourceCode)
-				if isUpperCase(methodName) {
-					goInterface.Methods = append(goInterface.Methods, methodNode.Content(sourceCode))
+				switch methodNode.Type() {
+				case "method_spec":
+					methodName := methodNode.NamedChild(0).Content(sourceCode)
+					if isUpperCase(methodName) {
+						goInterface.Methods = append(goInterface.Methods, methodNode.Content(sourceCode))
+					}
+				case "interface_type_name":
+					goInterface.Bases = append(goInterface.Bases, methodNode.Content(sourceCode))
+
 				}
 			}
 			interfaces = append(interfaces, goInterface)
@@ -94,13 +98,14 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 }
 
 type GoInterface struct {
+	Bases    []string `json:"bases"`
 	Name     string   `json:"name"`
 	Filename string   `json:"filename"`
 	Methods  []string `json:"methods"`
 }
 
 func (g GoInterface) String() string {
-	s := fmt.Sprintf("%s in %s\n", g.Name, g.Filename)
+	s := fmt.Sprintf("%s in %s\nBases: %v\n", g.Name, g.Filename, g.Bases)
 	for _, m := range g.Methods {
 		s += fmt.Sprintf("   %v\n", m)
 	}

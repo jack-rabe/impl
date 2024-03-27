@@ -61,3 +61,30 @@ type Doer interface {
 	}
 }
 
+func TestEmbeddedInterface(t *testing.T) {
+	var b bytes.Buffer
+	b.WriteString(`
+type Node interface {
+	Pos() token.Pos // position of first character belonging to the node
+	End() token.Pos // position of first character immediately after the node
+}
+
+// All expression nodes implement the Expr interface.
+type Expr interface {
+	Node
+	exprNode()
+}
+`)
+	interfaces, err := getInterfaces(&b, "file.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(interfaces) != 2 {
+		t.Fatalf("Expected to find 2 interfaces, got %v\n", len(interfaces))
+	}
+	exprI := interfaces[1]
+	t.Fatal(exprI)
+	if len(exprI.Methods) != 2 {
+		t.Fatalf("Expected to find 2 public methods on Expr, got %v\n", len(exprI.Methods))
+	}
+}
