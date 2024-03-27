@@ -9,6 +9,7 @@ func TestEmptyInterface(t *testing.T) {
 	filename := "file.go"
 	var b bytes.Buffer
 	b.WriteString(`
+package do
 type Doer interface {
 
 }
@@ -30,12 +31,16 @@ type Doer interface {
 	if i.Filename != filename {
 		t.Fatalf("Expected filename to be %s, got %v\n", filename, i.Filename)
 	}
+	if i.Package != "do" {
+		t.Fatalf("Expected Package to be do, got %s\n", i.Package)
+	}
 
 }
 
 func TestInterfaceWithPrivateMethods(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString(`
+package do
 type Doer interface {
 	Wag()
 	bark(a int)
@@ -64,6 +69,7 @@ type Doer interface {
 func TestEmbeddedInterface(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString(`
+package main
 type Node interface {
 	Pos() token.Pos // position of first character belonging to the node
 	End() token.Pos // position of first character immediately after the node
@@ -87,4 +93,27 @@ type Expr interface {
 	if len(exprI.Methods) != 2 {
 		t.Fatalf("Expected to find 2 public methods on Expr, got %v\n", len(exprI.Methods))
 	}
+}
+
+func TestPackageWorksWithComments(t *testing.T) {
+	filename := "file.go"
+	var b bytes.Buffer
+	b.WriteString(`
+// a comment
+package do
+type Doer interface {
+}
+`)
+	interfaces, err := getInterfaces(&b, filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(interfaces) != 1 {
+		t.Fatalf("Expected to find 1 interface, got %v\n", len(interfaces))
+	}
+	i := interfaces[0]
+	if i.Package != "do" {
+		t.Fatalf("Expected Package to be do, got %s\n", i.Package)
+	}
+
 }

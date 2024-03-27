@@ -36,8 +36,8 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	root := tree.RootNode()
+
 	q := `(
 	type_declaration (
 		type_spec 
@@ -49,10 +49,29 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	packageQ := `(package_clause (package_identifier))`
+	packageQuery, err := sitter.NewQuery([]byte(packageQ), lang)
+	if err != nil {
+		return nil, err
+	}
+
+	var packageName string
 	for i := range root.ChildCount() {
-		typeDeclNode := root.Child(int(i))
+		childNode := root.Child(int(i))
+
+		packageCursor := sitter.NewQueryCursor()
+		packageCursor.Exec(packageQuery, childNode)
+		for {
+			_, ok := packageCursor.NextMatch()
+			if !ok {
+				break
+			}
+			packageName = childNode.NamedChild(0).Content(sourceCode)
+		}
+
 		queryCursor := sitter.NewQueryCursor()
-		queryCursor.Exec(query, typeDeclNode)
+		queryCursor.Exec(query, childNode)
 		for {
 			_, ok := queryCursor.NextMatch()
 			if !ok {
@@ -60,11 +79,12 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 			}
 			// we found an interface declaration
 			goInterface := GoInterface{
+				Package:  packageName,
 				Filename: filename,
 				Methods:  []string{},
 				Bases:    []string{},
 			}
-			typeSpecNode := typeDeclNode.NamedChild(0)
+			typeSpecNode := childNode.NamedChild(0)
 
 			// get interface name
 			idNode := typeSpecNode.NamedChild(0)
@@ -98,10 +118,11 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 }
 
 type GoInterface struct {
-	Bases    []string `json:"bases"`
 	Name     string   `json:"name"`
-	Filename string   `json:"filename"`
+	Package  string   `json:"package"`
+	Bases    []string `json:"bases"`
 	Methods  []string `json:"methods"`
+	Filename string   `json:"filename"`
 }
 
 func (g GoInterface) String() string {
