@@ -43,7 +43,7 @@ func walkDirFn(allInterfaces *[]GoInterface) fs.WalkDirFunc {
 			}
 		}
 		if strings.Contains(path, ".go") {
-			interfaces, err := getInterfaces(path)
+			interfaces, err := getInterfaces(path, len(GO_ROOT_DIR))
 			if err != nil {
 				return nil
 			}
@@ -56,7 +56,7 @@ func walkDirFn(allInterfaces *[]GoInterface) fs.WalkDirFunc {
 	}
 }
 
-func getInterfaces(filename string) ([]GoInterface, error) {
+func getInterfaces(filename string, prefixPathLen int) ([]GoInterface, error) {
 	interfaces := make([]GoInterface, 0)
 	f, err := os.Open(filename)
 	if err != nil {
@@ -101,7 +101,7 @@ func getInterfaces(filename string) ([]GoInterface, error) {
 			}
 			// we found an interface declaration
 			goInterface := GoInterface{
-				Filename: filename[len(GO_ROOT_DIR)-1:],
+				Filename: filename[prefixPathLen-1:],
 				Methods:  []string{},
 			}
 			typeSpecNode := typeDeclNode.NamedChild(0)
