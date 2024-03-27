@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -16,30 +17,43 @@ import (
 const GO_ROOT_DIR = "/opt/homebrew/Cellar/go/1.22.1/libexec/src"
 
 func main() {
-	filepath.WalkDir(GO_ROOT_DIR, walkDirFn)
+	interfaces := make([]GoInterface, 0)
+	filepath.WalkDir(GO_ROOT_DIR, walkDirFn(&interfaces))
+	data, err := json.MarshalIndent(interfaces, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	filename := "interfaces.json"
+	err = os.WriteFile(filename, data, 0666)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("successfully wrote data for %d interfaces to %s\n", len(interfaces), filename)
 }
 
-func walkDirFn(path string, d fs.DirEntry, err error) error {
-	if err != nil {
-		fmt.Println(err)
-	}
-	excludedWords := []string{"cgo", "internal", "vendor", "_test", "testdata"}
-	for _, d := range excludedWords {
-		if strings.Contains(path, d) {
-			return nil
-		}
-	}
-	if strings.Contains(path, ".go") {
-		is, err := getInterfaces(path)
+func walkDirFn(allInterfaces *[]GoInterface) fs.WalkDirFunc {
+	return func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			fmt.Println(err)
 		}
-		if len(is) > 0 {
-			fmt.Println(is)
+		excludedWords := []string{"cgo", "internal", "vendor", "_test", "testdata"}
+		for _, d := range excludedWords {
+			if strings.Contains(path, d) {
+				return nil
+			}
+		}
+		if strings.Contains(path, ".go") {
+			interfaces, err := getInterfaces(path)
+			if err != nil {
+				return nil
+			}
+			if len(interfaces) > 0 {
+				*allInterfaces = append(*allInterfaces, interfaces...)
+			}
+			return nil
 		}
 		return nil
 	}
-	return nil
 }
 
 func getInterfaces(filename string) ([]GoInterface, error) {
@@ -86,7 +100,10 @@ func getInterfaces(filename string) ([]GoInterface, error) {
 				break
 			}
 			// we found an interface declaration
-			goInterface := GoInterface{Methods: []string{}}
+			goInterface := GoInterface{
+				Filename: filename[len(GO_ROOT_DIR)-1:],
+				Methods:  []string{},
+			}
 			typeSpecNode := typeDeclNode.NamedChild(0)
 
 			// get interface name
@@ -118,14 +135,15 @@ func getInterfaces(filename string) ([]GoInterface, error) {
 }
 
 type GoInterface struct {
-	Name    string   `json:"name"`
-	Methods []string `json:"methods"`
+	Name     string   `json:"name"`
+	Filename string   `json:"filename"`
+	Methods  []string `json:"methods"`
 }
 
 func (g GoInterface) String() string {
-	s := fmt.Sprintf("%s\n", g.Name)
+	s := fmt.Sprintf("%s in %s\n", g.Name, g.Filename)
 	for _, m := range g.Methods {
-		s += fmt.Sprintf("  %v\n", m)
+		s += fmt.Sprintf("   %v\n", m)
 	}
 	return s
 }
