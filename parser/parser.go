@@ -63,10 +63,15 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 		if !isUpperCase(interfaceName) {
 			continue
 		}
+
 		interfaceTypeN := m.Captures[1].Node
 		methods, err := getMethods(interfaceTypeN, src, lang)
 		if err != nil {
-			panic(err)
+			return nil, err
+		}
+		bases, err := getBases(interfaceTypeN, src, lang)
+		if err != nil {
+			return nil, err
 		}
 
 		interfaces = append(interfaces, GoInterface{
@@ -74,7 +79,7 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 			Package:  packageName,
 			Filename: filename,
 			Methods:  methods,
-			bases:    []string{},
+			bases:    bases,
 		})
 	}
 
@@ -83,6 +88,27 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 		defineEmbeddedMethods(idx, interfaces)
 	}
 	return interfaces, nil
+}
+
+func getBases(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language) ([]string, error) {
+	bases := []string{}
+
+	q := `( interface_type_name ) @base`
+	query, err := sitter.NewQuery([]byte(q), lang)
+	if err != nil {
+		return nil, err
+	}
+	cursor := sitter.NewQueryCursor()
+	cursor.Exec(query, interfaceTypeNode)
+	for {
+		match, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+		bases = append(bases, match.Captures[0].Node.Content(src))
+	}
+
+	return bases, nil
 }
 
 // returns the a list of the methods on an interface, given an inteface_type_node
