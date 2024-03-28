@@ -15,19 +15,20 @@ func GetInterfaces(filename string, prefixPathLen int) ([]GoInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	truncatedFilename := filename[prefixPathLen:]
-	return getInterfaces(f, truncatedFilename)
-}
-
-func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
-	interfaces := make([]GoInterface, 0)
-	sourceCode, err := io.ReadAll(r)
+	sourceCode, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
 	if len(sourceCode) != 0 {
 		sourceCode = sourceCode[:len(sourceCode)-1]
 	}
+
+	truncatedFilename := filename[prefixPathLen:]
+	return getInterfaces(sourceCode, truncatedFilename)
+}
+
+func getInterfaces(sourceCode []byte, filename string) ([]GoInterface, error) {
+	interfaces := make([]GoInterface, 0)
 
 	lang := golang.GetLanguage()
 	parser := sitter.NewParser()
@@ -104,9 +105,19 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 				case "method_spec":
 					var returnType string
 					numChildren := int(methodNode.NamedChildCount())
-					m := methodNode.NamedChild(numChildren - 1)
 					if numChildren == 3 {
-						returnType = m.Content(sourceCode)
+						returnNode := methodNode.NamedChild(numChildren - 1)
+						// switch returnNode.Type() {
+						// case "function_type":
+						// 	fmt.Println("func")
+						// case "parameter_list":
+						// 	fmt.Println("param list")
+						// case "type_identifier":
+						// 	fmt.Println("type id")
+						// case "slice_type":
+						// 	fmt.Println("slice")
+						// }
+						returnType = returnNode.Content(sourceCode)
 					}
 					methodName := methodNode.NamedChild(0).Content(sourceCode)
 					if isUpperCase(methodName) {
@@ -115,9 +126,9 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 							ReturnType: returnType,
 						})
 					}
+				// handle inheritance
 				case "interface_type_name":
 					goInterface.bases = append(goInterface.bases, methodNode.Content(sourceCode))
-
 				}
 			}
 			interfaces = append(interfaces, goInterface)
@@ -148,8 +159,9 @@ func defineEmbeddedMethods(idx int, interfaces []GoInterface) []method {
 }
 
 type GoInterface struct {
-	Name     string `json:"name"`
-	Package  string `json:"package"`
+	Name    string `json:"name"`
+	Package string `json:"package"`
+	// "Superclasses" for this interface
 	bases    []string
 	Methods  []method `json:"methods"`
 	Filename string   `json:"filename"`

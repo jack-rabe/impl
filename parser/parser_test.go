@@ -14,7 +14,7 @@ package do
 type Doer interface {
 }
 `)
-	interfaces, err := getInterfaces(&b, filename)
+	interfaces, err := getInterfaces(b.Bytes(), filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ type Doer interface {
 	bark(a int)
 }
 `)
-	interfaces, err := getInterfaces(&b, "file.go")
+	interfaces, err := getInterfaces(b.Bytes(), "file.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ type Expr interface {
 	Node
 }
 `)
-	interfaces, err := getInterfaces(&b, "file.go")
+	interfaces, err := getInterfaces(b.Bytes(), "file.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ package do
 type Doer interface {
 }
 `)
-	interfaces, err := getInterfaces(&b, filename)
+	interfaces, err := getInterfaces(b.Bytes(), filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,10 +128,12 @@ type Doer interface {
 	Yeet() string
 	Jog() bool
 	Run()
+	Run2() (int, string)
+	Run3() func (int, string) bool
 }
 `)
-	interfaces, err := getInterfaces(&b, filename)
-	expected := []string{"int", "string", "bool", ""}
+	interfaces, err := getInterfaces(b.Bytes(), filename)
+	expected := []string{"int", "string", "bool", "", "(int, string)", "func (int, string) bool"}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +158,7 @@ type Doer interface {
 	DoStuff() Potato
 }
 `)
-	interfaces, err := getInterfaces(&b, filename)
+	interfaces, err := getInterfaces(b.Bytes(), filename)
 	if err != nil {
 		t.Fatal(err)
 	}
