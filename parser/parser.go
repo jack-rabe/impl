@@ -10,6 +10,9 @@ import (
 	"github.com/smacker/go-tree-sitter/golang"
 )
 
+// takes a filename and length of the path prefix to ignore when computing
+// filepaths and return a slice that contains all public interfaces and their
+// public-facing methods
 func GetInterfaces(filename string, prefixPathLen int) ([]GoInterface, error) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -29,15 +32,8 @@ func GetInterfaces(filename string, prefixPathLen int) ([]GoInterface, error) {
 
 func getInterfaces(sourceCode []byte, filename string) ([]GoInterface, error) {
 	interfaces := make([]GoInterface, 0)
-
 	lang := golang.GetLanguage()
-	parser := sitter.NewParser()
-	parser.SetLanguage(lang)
-	tree, err := parser.ParseCtx(context.Background(), nil, sourceCode)
-	if err != nil {
-		return nil, err
-	}
-	root := tree.RootNode()
+	root, err := getRootNode(lang, sourceCode)
 
 	q := `(
 	type_declaration (
@@ -134,6 +130,8 @@ func getInterfaces(sourceCode []byte, filename string) ([]GoInterface, error) {
 			interfaces = append(interfaces, goInterface)
 		}
 	}
+
+	// TODO fix for interfaces that inherit from other files
 	for idx := range interfaces {
 		defineEmbeddedMethods(idx, interfaces)
 	}
@@ -186,4 +184,14 @@ func isUpperCase(s string) bool {
 	}
 	firstChar := s[0]
 	return firstChar >= 'A' && firstChar <= 'Z'
+}
+
+func getRootNode(lang *sitter.Language, sourceCode []byte) (*sitter.Node, error) {
+	parser := sitter.NewParser()
+	parser.SetLanguage(lang)
+	tree, err := parser.ParseCtx(context.Background(), nil, sourceCode)
+	if err != nil {
+		return nil, err
+	}
+	return tree.RootNode(), nil
 }
