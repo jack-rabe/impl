@@ -49,7 +49,7 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 	)`
 	query, err := sitter.NewQuery([]byte(q), lang)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	queryCursor := sitter.NewQueryCursor()
 	queryCursor.Exec(query, root)
@@ -63,51 +63,19 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 		if !isUpperCase(interfaceName) {
 			continue
 		}
-		goInterface := GoInterface{
+		interfaceTypeN := m.Captures[1].Node
+		methods, err := getMethods(interfaceTypeN, src, lang)
+		if err != nil {
+			panic(err)
+		}
+
+		interfaces = append(interfaces, GoInterface{
 			Name:     interfaceName,
 			Package:  packageName,
 			Filename: filename,
-			Methods:  []method{},
+			Methods:  methods,
 			bases:    []string{},
-		}
-
-		interfaceTypeN := m.Captures[1].Node
-		innerQ := `( method_spec
-			name: (field_identifier) @name
-			parameters: (parameter_list) @params
-			result: (_)? @return
-		) @content
-		`
-		innerQuery, err := sitter.NewQuery([]byte(innerQ), lang)
-		if err != nil {
-			return nil, err
-		}
-		queryCursor := sitter.NewQueryCursor()
-		queryCursor.Exec(innerQuery, interfaceTypeN)
-		for {
-			methodMatch, ok := queryCursor.NextMatch()
-			if !ok {
-				break
-			}
-			methodName := methodMatch.Captures[1].Node.Content(src)
-			if !isUpperCase(methodName) {
-				continue
-			}
-			interfaceMethod := method{
-				Content: methodMatch.Captures[0].Node.Content(src),
-				Name:    methodName,
-				Params:  []string{},
-			}
-
-			parametersN := methodMatch.Captures[2].Node
-			interfaceMethod.Params = append(interfaceMethod.Params, parametersN.Content(src))
-			hasReturnType := len(methodMatch.Captures) == 4
-			if hasReturnType {
-				interfaceMethod.ReturnType = methodMatch.Captures[3].Node.Content(src)
-			}
-			goInterface.Methods = append(goInterface.Methods, interfaceMethod)
-		}
-		interfaces = append(interfaces, goInterface)
+		})
 	}
 
 	// TODO fix for interfaces that inherit from other files
@@ -115,6 +83,50 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 		defineEmbeddedMethods(idx, interfaces)
 	}
 	return interfaces, nil
+}
+
+// returns the a list of the methods on an interface, given an inteface_type_node
+func getMethods(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language) ([]method, error) {
+	methods := []method{}
+
+	methodQ := `( method_spec
+			name: (field_identifier) @name
+			parameters: (parameter_list) @params
+			result: (_)? @return
+		) @content
+		`
+	methodQuery, err := sitter.NewQuery([]byte(methodQ), lang)
+	if err != nil {
+		return nil, err
+	}
+	queryCursor := sitter.NewQueryCursor()
+	queryCursor.Exec(methodQuery, interfaceTypeNode)
+	for {
+		methodMatch, ok := queryCursor.NextMatch()
+		if !ok {
+			break
+		}
+
+		methodName := methodMatch.Captures[1].Node.Content(src)
+		if !isUpperCase(methodName) {
+			continue
+		}
+		interfaceMethod := method{
+			Content: methodMatch.Captures[0].Node.Content(src),
+			Name:    methodName,
+			Params:  []string{},
+		}
+
+		parametersN := methodMatch.Captures[2].Node
+		interfaceMethod.Params = append(interfaceMethod.Params, parametersN.Content(src))
+		hasReturnType := len(methodMatch.Captures) == 4
+		if hasReturnType {
+			interfaceMethod.ReturnType = methodMatch.Captures[3].Node.Content(src)
+		}
+		methods = append(methods, interfaceMethod)
+	}
+
+	return methods, nil
 }
 
 func defineEmbeddedMethods(idx int, interfaces []GoInterface) []method {
@@ -188,14 +200,10 @@ func getPackageName(root *sitter.Node, src []byte, lang *sitter.Language) (strin
 
 	packageCursor := sitter.NewQueryCursor()
 	packageCursor.Exec(packageQuery, root)
-	// TODO get rid of the for loop
-	for {
-		m, ok := packageCursor.NextMatch()
-		if !ok {
-			break
-		}
-		packageName := m.Captures[0].Node
-		return packageName.Content(src), nil
+	m, ok := packageCursor.NextMatch()
+	if !ok {
+		return "", errors.New("couldn't find a package name")
 	}
-	return "", errors.New("couldn't find a package name")
+	packageName := m.Captures[0].Node
+	return packageName.Content(src), nil
 }
