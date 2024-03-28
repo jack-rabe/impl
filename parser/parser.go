@@ -82,7 +82,7 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 				Package:  packageName,
 				Filename: filename,
 				Methods:  []method{},
-				Bases:    []string{},
+				bases:    []string{},
 			}
 			typeSpecNode := childNode.NamedChild(0)
 
@@ -116,7 +116,7 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 						})
 					}
 				case "interface_type_name":
-					goInterface.Bases = append(goInterface.Bases, methodNode.Content(sourceCode))
+					goInterface.bases = append(goInterface.bases, methodNode.Content(sourceCode))
 
 				}
 			}
@@ -131,10 +131,10 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 
 func defineEmbeddedMethods(idx int, interfaces []GoInterface) []method {
 	i := &interfaces[idx]
-	if len(i.Bases) == 0 {
+	if len(i.bases) == 0 {
 		return i.Methods
 	}
-	for _, base := range i.Bases {
+	for _, base := range i.bases {
 		for baseIdx, potentialBase := range interfaces {
 			if base == potentialBase.Name {
 				methods := defineEmbeddedMethods(baseIdx, interfaces)
@@ -143,14 +143,14 @@ func defineEmbeddedMethods(idx int, interfaces []GoInterface) []method {
 			}
 		}
 	}
-	i.Bases = []string{}
+	i.bases = []string{}
 	return i.Methods
 }
 
 type GoInterface struct {
-	Name     string   `json:"name"`
-	Package  string   `json:"package"`
-	Bases    []string `json:"bases"`
+	Name     string `json:"name"`
+	Package  string `json:"package"`
+	bases    []string
 	Methods  []method `json:"methods"`
 	Filename string   `json:"filename"`
 }
@@ -161,7 +161,7 @@ type method struct {
 }
 
 func (g GoInterface) String() string {
-	s := fmt.Sprintf("%s in %s\nBases: %v\n", g.Name, g.Filename, g.Bases)
+	s := fmt.Sprintf("%s in %s\n", g.Name, g.Filename)
 	for _, m := range g.Methods {
 		s += fmt.Sprintf("   %v\n", m)
 	}

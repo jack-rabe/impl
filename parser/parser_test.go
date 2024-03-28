@@ -10,8 +10,8 @@ func TestEmptyInterface(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString(`
 package do
-type Doer interface {
 
+type Doer interface {
 }
 `)
 	interfaces, err := getInterfaces(&b, filename)
@@ -41,6 +41,7 @@ func TestInterfaceWithPrivateMethods(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString(`
 package do
+
 type Doer interface {
 	Wag()
 	bark(a int)
@@ -103,6 +104,7 @@ func TestPackageWorksWithComments(t *testing.T) {
 	b.WriteString(`
 // a comment
 package do
+
 type Doer interface {
 }
 `)
@@ -114,5 +116,55 @@ type Doer interface {
 	if i.Package != "do" {
 		t.Fatalf("Expected Package to be, got %s\n", i.Package)
 	}
+}
+func TestReturnTypes(t *testing.T) {
+	filename := "file.go"
+	var b bytes.Buffer
+	b.WriteString(`
+package dog
 
+type Doer interface {
+	DoStuff() int
+	Yeet() string
+	Jog() bool
+	Run()
+}
+`)
+	interfaces, err := getInterfaces(&b, filename)
+	expected := []string{"int", "string", "bool", ""}
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := interfaces[0]
+	for idx := range i.Methods {
+		returnType := i.Methods[idx].ReturnType
+		if returnType != expected[idx] {
+			t.Fatalf(`expected return type "%s", got "%s"`, expected[idx], returnType)
+		}
+	}
+}
+
+func TestPackageQualifiersAreAdded(t *testing.T) {
+	filename := "file.go"
+	var b bytes.Buffer
+	b.WriteString(`
+package dog
+
+type Potato int
+
+type Doer interface {
+	DoStuff() Potato
+}
+`)
+	interfaces, err := getInterfaces(&b, filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := interfaces[0]
+	if i.Methods[0].Content != "DoStuff() dog.Potato" {
+		t.Fatalf(`Expected content to be "DoStuff() dog.Potato", got "%s"`, i.Methods[0].Content)
+	}
+	if i.Methods[0].ReturnType != "dog.Potato" {
+		t.Fatalf(`Expected return type to be "dog.Potato", got "%s"`, i.Methods[0].ReturnType)
+	}
 }
