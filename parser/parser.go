@@ -81,7 +81,7 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 			goInterface := GoInterface{
 				Package:  packageName,
 				Filename: filename,
-				Methods:  []string{},
+				Methods:  []method{},
 				Bases:    []string{},
 			}
 			typeSpecNode := childNode.NamedChild(0)
@@ -102,9 +102,18 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 				methodNode := typeNode.NamedChild(int(j))
 				switch methodNode.Type() {
 				case "method_spec":
+					var returnType string
+					numChildren := int(methodNode.NamedChildCount())
+					m := methodNode.NamedChild(numChildren - 1)
+					if numChildren == 3 {
+						returnType = m.Content(sourceCode)
+					}
 					methodName := methodNode.NamedChild(0).Content(sourceCode)
 					if isUpperCase(methodName) {
-						goInterface.Methods = append(goInterface.Methods, methodNode.Content(sourceCode))
+						goInterface.Methods = append(goInterface.Methods, method{
+							Content:    methodNode.Content(sourceCode),
+							ReturnType: returnType,
+						})
 					}
 				case "interface_type_name":
 					goInterface.Bases = append(goInterface.Bases, methodNode.Content(sourceCode))
@@ -114,15 +123,41 @@ func getInterfaces(r io.Reader, filename string) ([]GoInterface, error) {
 			interfaces = append(interfaces, goInterface)
 		}
 	}
+	for idx := range interfaces {
+		defineEmbeddedMethods(idx, interfaces)
+	}
 	return interfaces, nil
+}
+
+func defineEmbeddedMethods(idx int, interfaces []GoInterface) []method {
+	i := &interfaces[idx]
+	if len(i.Bases) == 0 {
+		return i.Methods
+	}
+	for _, base := range i.Bases {
+		for baseIdx, potentialBase := range interfaces {
+			if base == potentialBase.Name {
+				methods := defineEmbeddedMethods(baseIdx, interfaces)
+				i.Methods = append(i.Methods, methods...)
+				break
+			}
+		}
+	}
+	i.Bases = []string{}
+	return i.Methods
 }
 
 type GoInterface struct {
 	Name     string   `json:"name"`
 	Package  string   `json:"package"`
 	Bases    []string `json:"bases"`
-	Methods  []string `json:"methods"`
+	Methods  []method `json:"methods"`
 	Filename string   `json:"filename"`
+}
+
+type method struct {
+	Content    string `json:"content"`
+	ReturnType string `json:"return_type"`
 }
 
 func (g GoInterface) String() string {

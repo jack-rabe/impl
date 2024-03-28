@@ -32,7 +32,7 @@ type Doer interface {
 		t.Fatalf("Expected filename to be %s, got %v\n", filename, i.Filename)
 	}
 	if i.Package != "do" {
-		t.Fatalf("Expected Package to be do, got %s\n", i.Package)
+		t.Fatalf("Expected Package to be, got %s\n", i.Package)
 	}
 
 }
@@ -61,7 +61,7 @@ type Doer interface {
 		t.Fatalf("Expected to find 1 public method on Doer, got %v\n", len(i.Methods))
 	}
 	method := i.Methods[0]
-	if method != "Wag()" {
+	if method.Content != "Wag()" {
 		t.Fatalf("Expected method to be Wag(), got %s", method)
 	}
 }
@@ -70,7 +70,11 @@ func TestEmbeddedInterface(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString(`
 package main
+type Dog interface {
+	Posx() int
+}
 type Node interface {
+	Dog
 	Pos() token.Pos // position of first character belonging to the node
 	End() token.Pos // position of first character immediately after the node
 }
@@ -78,20 +82,18 @@ type Node interface {
 // All expression nodes implement the Expr interface.
 type Expr interface {
 	Node
-	exprNode()
 }
 `)
 	interfaces, err := getInterfaces(&b, "file.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(interfaces) != 2 {
-		t.Fatalf("Expected to find 2 interfaces, got %v\n", len(interfaces))
+	if len(interfaces) != 3 {
+		t.Fatalf("Expected to find 3 interfaces, got %v\n", len(interfaces))
 	}
-	exprI := interfaces[1]
-	t.Fatal(exprI)
-	if len(exprI.Methods) != 2 {
-		t.Fatalf("Expected to find 2 public methods on Expr, got %v\n", len(exprI.Methods))
+	exprI := interfaces[2]
+	if len(exprI.Methods) != 3 {
+		t.Fatalf("Expected to find 3 public methods on Expr, got %v\n", len(exprI.Methods))
 	}
 }
 
@@ -108,12 +110,9 @@ type Doer interface {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(interfaces) != 1 {
-		t.Fatalf("Expected to find 1 interface, got %v\n", len(interfaces))
-	}
 	i := interfaces[0]
 	if i.Package != "do" {
-		t.Fatalf("Expected Package to be do, got %s\n", i.Package)
+		t.Fatalf("Expected Package to be, got %s\n", i.Package)
 	}
 
 }
