@@ -2,6 +2,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -47,25 +48,13 @@ func getInterfaces(sourceCode []byte, filename string) ([]GoInterface, error) {
 		return nil, err
 	}
 
-	packageQ := `(package_clause (package_identifier))`
-	packageQuery, err := sitter.NewQuery([]byte(packageQ), lang)
+	packageName, err := getPackageName(root, sourceCode, lang)
 	if err != nil {
 		return nil, err
 	}
 
-	var packageName string
 	for i := range root.ChildCount() {
 		childNode := root.Child(int(i))
-
-		packageCursor := sitter.NewQueryCursor()
-		packageCursor.Exec(packageQuery, childNode)
-		for {
-			_, ok := packageCursor.NextMatch()
-			if !ok {
-				break
-			}
-			packageName = childNode.NamedChild(0).Content(sourceCode)
-		}
 
 		queryCursor := sitter.NewQueryCursor()
 		queryCursor.Exec(query, childNode)
@@ -194,4 +183,26 @@ func getRootNode(lang *sitter.Language, sourceCode []byte) (*sitter.Node, error)
 		return nil, err
 	}
 	return tree.RootNode(), nil
+}
+
+func getPackageName(root *sitter.Node, sourceCode []byte, lang *sitter.Language) (string, error) {
+	packageQ := `(package_clause 
+		(package_identifier) @id
+	)`
+	packageQuery, err := sitter.NewQuery([]byte(packageQ), lang)
+	if err != nil {
+		return "", err
+	}
+
+	packageCursor := sitter.NewQueryCursor()
+	packageCursor.Exec(packageQuery, root)
+	for {
+		m, ok := packageCursor.NextMatch()
+		if !ok {
+			break
+		}
+		packageName := m.Captures[0].Node
+		return packageName.Content(sourceCode), nil
+	}
+	return "", errors.New("couldn't find a package name")
 }
