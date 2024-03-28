@@ -19,105 +19,95 @@ func GetInterfaces(filename string, prefixPathLen int) ([]GoInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	sourceCode, err := io.ReadAll(f)
+	src, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
-	if len(sourceCode) != 0 {
-		sourceCode = sourceCode[:len(sourceCode)-1]
+	if len(src) != 0 {
+		src = src[:len(src)-1]
 	}
 
 	truncatedFilename := filename[prefixPathLen:]
-	return getInterfaces(sourceCode, truncatedFilename)
+	return getInterfaces(src, truncatedFilename)
 }
 
-func getInterfaces(sourceCode []byte, filename string) ([]GoInterface, error) {
+func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 	interfaces := make([]GoInterface, 0)
 	lang := golang.GetLanguage()
-	root, err := getRootNode(lang, sourceCode)
+	root, err := getRootNode(lang, src)
 
-	q := `(
-	type_declaration (
-		type_spec 
-			name: (type_identifier) 
-			type: (interface_type)
+	packageName, err := getPackageName(root, src, lang)
+	if err != nil {
+		return nil, err
+	}
+
+	q := `( type_declaration
+		( type_spec 
+			name: (type_identifier) @name
+			type: (interface_type) @type
 		)
 	)`
 	query, err := sitter.NewQuery([]byte(q), lang)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
+	queryCursor := sitter.NewQueryCursor()
+	queryCursor.Exec(query, root)
+	for {
+		m, ok := queryCursor.NextMatch()
+		if !ok {
+			break
+		}
 
-	packageName, err := getPackageName(root, sourceCode, lang)
-	if err != nil {
-		return nil, err
-	}
+		interfaceName := m.Captures[0].Node.Content(src)
+		if !isUpperCase(interfaceName) {
+			continue
+		}
+		goInterface := GoInterface{
+			Name:     interfaceName,
+			Package:  packageName,
+			Filename: filename,
+			Methods:  []method{},
+			bases:    []string{},
+		}
 
-	for i := range root.ChildCount() {
-		childNode := root.Child(int(i))
-
+		interfaceTypeN := m.Captures[1].Node
+		innerQ := `( method_spec
+			name: (field_identifier) @name
+			parameters: (parameter_list) @params
+			result: (_)? @return
+		) @content
+		`
+		innerQuery, err := sitter.NewQuery([]byte(innerQ), lang)
+		if err != nil {
+			return nil, err
+		}
 		queryCursor := sitter.NewQueryCursor()
-		queryCursor.Exec(query, childNode)
+		queryCursor.Exec(innerQuery, interfaceTypeN)
 		for {
-			_, ok := queryCursor.NextMatch()
+			methodMatch, ok := queryCursor.NextMatch()
 			if !ok {
 				break
 			}
-			// we found an interface declaration
-			goInterface := GoInterface{
-				Package:  packageName,
-				Filename: filename,
-				Methods:  []method{},
-				bases:    []string{},
+			methodName := methodMatch.Captures[1].Node.Content(src)
+			if !isUpperCase(methodName) {
+				continue
 			}
-			typeSpecNode := childNode.NamedChild(0)
+			interfaceMethod := method{
+				Content: methodMatch.Captures[0].Node.Content(src),
+				Name:    methodName,
+				Params:  []string{},
+			}
 
-			// get interface name
-			idNode := typeSpecNode.NamedChild(0)
-			if idNode == nil {
-				continue
+			parametersN := methodMatch.Captures[2].Node
+			interfaceMethod.Params = append(interfaceMethod.Params, parametersN.Content(src))
+			hasReturnType := len(methodMatch.Captures) == 4
+			if hasReturnType {
+				interfaceMethod.ReturnType = methodMatch.Captures[3].Node.Content(src)
 			}
-			interfaceName := idNode.Content(sourceCode)
-			if !isUpperCase(interfaceName) {
-				continue
-			}
-			goInterface.Name = interfaceName
-			// get interface methods
-			typeNode := typeSpecNode.NamedChild(1)
-			for j := range typeNode.NamedChildCount() {
-				methodNode := typeNode.NamedChild(int(j))
-				switch methodNode.Type() {
-				case "method_spec":
-					var returnType string
-					numChildren := int(methodNode.NamedChildCount())
-					if numChildren == 3 {
-						returnNode := methodNode.NamedChild(numChildren - 1)
-						// switch returnNode.Type() {
-						// case "function_type":
-						// 	fmt.Println("func")
-						// case "parameter_list":
-						// 	fmt.Println("param list")
-						// case "type_identifier":
-						// 	fmt.Println("type id")
-						// case "slice_type":
-						// 	fmt.Println("slice")
-						// }
-						returnType = returnNode.Content(sourceCode)
-					}
-					methodName := methodNode.NamedChild(0).Content(sourceCode)
-					if isUpperCase(methodName) {
-						goInterface.Methods = append(goInterface.Methods, method{
-							Content:    methodNode.Content(sourceCode),
-							ReturnType: returnType,
-						})
-					}
-				// handle inheritance
-				case "interface_type_name":
-					goInterface.bases = append(goInterface.bases, methodNode.Content(sourceCode))
-				}
-			}
-			interfaces = append(interfaces, goInterface)
+			goInterface.Methods = append(goInterface.Methods, interfaceMethod)
 		}
+		interfaces = append(interfaces, goInterface)
 	}
 
 	// TODO fix for interfaces that inherit from other files
@@ -155,8 +145,10 @@ type GoInterface struct {
 }
 
 type method struct {
-	Content    string `json:"content"`
-	ReturnType string `json:"return_type"`
+	Content    string   `json:"content"`
+	Name       string   `json:"name"`
+	Params     []string `json:"params"`
+	ReturnType string   `json:"return_type"`
 }
 
 func (g GoInterface) String() string {
@@ -175,17 +167,17 @@ func isUpperCase(s string) bool {
 	return firstChar >= 'A' && firstChar <= 'Z'
 }
 
-func getRootNode(lang *sitter.Language, sourceCode []byte) (*sitter.Node, error) {
+func getRootNode(lang *sitter.Language, src []byte) (*sitter.Node, error) {
 	parser := sitter.NewParser()
 	parser.SetLanguage(lang)
-	tree, err := parser.ParseCtx(context.Background(), nil, sourceCode)
+	tree, err := parser.ParseCtx(context.Background(), nil, src)
 	if err != nil {
 		return nil, err
 	}
 	return tree.RootNode(), nil
 }
 
-func getPackageName(root *sitter.Node, sourceCode []byte, lang *sitter.Language) (string, error) {
+func getPackageName(root *sitter.Node, src []byte, lang *sitter.Language) (string, error) {
 	packageQ := `(package_clause 
 		(package_identifier) @id
 	)`
@@ -196,13 +188,14 @@ func getPackageName(root *sitter.Node, sourceCode []byte, lang *sitter.Language)
 
 	packageCursor := sitter.NewQueryCursor()
 	packageCursor.Exec(packageQuery, root)
+	// TODO get rid of the for loop
 	for {
 		m, ok := packageCursor.NextMatch()
 		if !ok {
 			break
 		}
 		packageName := m.Captures[0].Node
-		return packageName.Content(sourceCode), nil
+		return packageName.Content(src), nil
 	}
 	return "", errors.New("couldn't find a package name")
 }
