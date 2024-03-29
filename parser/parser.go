@@ -90,6 +90,7 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 	return interfaces, nil
 }
 
+// returns the a list of the base classes on an interface that has embeddings, given an inteface_type_node
 func getBases(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language) ([]string, error) {
 	bases := []string{}
 
@@ -115,39 +116,42 @@ func getBases(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language)
 func getMethods(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language) ([]method, error) {
 	methods := []method{}
 
-	methodQ := `( method_spec
+	q := `( method_spec
 			name: (field_identifier) @name
 			parameters: (parameter_list) @params
 			result: (_)? @return
 		) @content
 		`
-	methodQuery, err := sitter.NewQuery([]byte(methodQ), lang)
+	query, err := sitter.NewQuery([]byte(q), lang)
 	if err != nil {
 		return nil, err
 	}
-	queryCursor := sitter.NewQueryCursor()
-	queryCursor.Exec(methodQuery, interfaceTypeNode)
+	cursor := sitter.NewQueryCursor()
+	cursor.Exec(query, interfaceTypeNode)
 	for {
-		methodMatch, ok := queryCursor.NextMatch()
+		match, ok := cursor.NextMatch()
 		if !ok {
 			break
 		}
 
-		methodName := methodMatch.Captures[1].Node.Content(src)
+		methodName := match.Captures[1].Node.Content(src)
 		if !isUpperCase(methodName) {
 			continue
 		}
 		interfaceMethod := method{
-			Content: methodMatch.Captures[0].Node.Content(src),
+			Content: match.Captures[0].Node.Content(src),
 			Name:    methodName,
 			Params:  []string{},
 		}
 
-		parametersN := methodMatch.Captures[2].Node
-		interfaceMethod.Params = append(interfaceMethod.Params, parametersN.Content(src))
-		hasReturnType := len(methodMatch.Captures) == 4
+		parametersN := match.Captures[2].Node
+		for i := range parametersN.NamedChildCount() {
+			param := parametersN.NamedChild(int(i)).Content(src)
+			interfaceMethod.Params = append(interfaceMethod.Params, param)
+		}
+		hasReturnType := len(match.Captures) == 4
 		if hasReturnType {
-			interfaceMethod.ReturnType = methodMatch.Captures[3].Node.Content(src)
+			interfaceMethod.ReturnType = match.Captures[3].Node.Content(src)
 		}
 		methods = append(methods, interfaceMethod)
 	}
@@ -155,6 +159,8 @@ func getMethods(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Languag
 	return methods, nil
 }
 
+// removes the bases from interface at index idx and adds the associated methods to the base interface
+// it will make recursive calls if there is a chain of dependencies
 func defineEmbeddedMethods(idx int, interfaces []GoInterface) []method {
 	i := &interfaces[idx]
 	if len(i.bases) == 0 {

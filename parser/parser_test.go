@@ -155,7 +155,7 @@ package dog
 type Potato int
 
 type Doer interface {
-	DoStuff() Potato
+	DoStuff(Potato, string) Potato
 }
 `)
 	interfaces, err := getInterfaces(b.Bytes(), filename)
