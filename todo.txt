@@ -1,0 +1,20 @@
+- add imports automatically!!! 
+    - use goimports to autoimport (after write)
+    - problem could happen with imports from same package, maybe add to method body?
+- low priority dynamically get GO path
+- low priority - add basic returns
+- check for duplicate implementations?
+- other TODO comments
+
+? do i have to worry about pointer receivers??? (i think so)
+? add map to make parent access more efficient
+? remind to install json parser with luarocks???
+? investigate Ordered interface 
+? inheritance from private interfaces?
+{
+    "name": "Ordered",
+    "package": "cmp",
+    "bases": [],
+    "methods": [],
+    "filename": "cmp/cmp.go"
+}
