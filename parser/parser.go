@@ -144,14 +144,8 @@ func getMethods(interfaceTypeNode *sitter.Node, src []byte) ([]method, error) {
 		interfaceMethod := method{
 			Content: match.Captures[0].Node.Content(src),
 			Name:    methodName,
-			Params:  []string{},
 		}
 
-		parametersN := match.Captures[2].Node
-		for i := range parametersN.NamedChildCount() {
-			param := parametersN.NamedChild(int(i)).Content(src)
-			interfaceMethod.Params = append(interfaceMethod.Params, param)
-		}
 		hasReturnType := len(match.Captures) == 4
 		if hasReturnType {
 			// TODO
@@ -193,10 +187,9 @@ type GoInterface struct {
 }
 
 type method struct {
-	Content    string   `json:"content"`
-	Name       string   `json:"name"`
-	Params     []string `json:"params"`
-	ReturnType string   `json:"return_type"`
+	Content    string `json:"content"`
+	Name       string `json:"name"`
+	ReturnType string `json:"return_type"`
 }
 
 func (g GoInterface) String() string {
