@@ -15,7 +15,10 @@ const GO_ROOT_DIR = "/opt/homebrew/Cellar/go/1.22.1/libexec/src/"
 func main() {
 	fmt.Printf("searching %s for interfaces...\n", GO_ROOT_DIR)
 	interfaces := make([]parser.GoInterface, 0)
-	filepath.WalkDir(GO_ROOT_DIR, walkDirFn(&interfaces))
+	err := filepath.WalkDir(GO_ROOT_DIR, walkDirFn(&interfaces))
+	if err != nil {
+		panic(err)
+	}
 	data, err := json.MarshalIndent(interfaces, "", "  ")
 	if err != nil {
 		panic(err)
@@ -44,6 +47,7 @@ func walkDirFn(allInterfaces *[]parser.GoInterface) fs.WalkDirFunc {
 			if err != nil {
 				return nil
 			}
+
 			if len(interfaces) > 0 {
 				*allInterfaces = append(*allInterfaces, interfaces...)
 			}

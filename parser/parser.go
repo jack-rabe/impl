@@ -33,10 +33,13 @@ func GetInterfaces(filename string, prefixPathLen int) ([]GoInterface, error) {
 
 func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 	interfaces := make([]GoInterface, 0)
-	lang := golang.GetLanguage()
-	root, err := getRootNode(lang, src)
 
-	packageName, err := getPackageName(root, src, lang)
+	root, err := getRootNode(src)
+	if err != nil {
+		return nil, err
+	}
+
+	packageName, err := getPackageName(src)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +50,7 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 			type: (interface_type) @type
 		)
 	)`
-	query, err := sitter.NewQuery([]byte(q), lang)
+	query, err := sitter.NewQuery([]byte(q), golang.GetLanguage())
 	if err != nil {
 		return nil, err
 	}
@@ -65,11 +68,11 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 		}
 
 		interfaceTypeN := m.Captures[1].Node
-		methods, err := getMethods(interfaceTypeN, src, lang)
+		methods, err := getMethods(interfaceTypeN, src)
 		if err != nil {
 			return nil, err
 		}
-		bases, err := getBases(interfaceTypeN, src, lang)
+		bases, err := getBases(interfaceTypeN, src)
 		if err != nil {
 			return nil, err
 		}
@@ -91,11 +94,11 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 }
 
 // returns the a list of the base classes on an interface that has embeddings, given an inteface_type_node
-func getBases(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language) ([]string, error) {
+func getBases(interfaceTypeNode *sitter.Node, src []byte) ([]string, error) {
 	bases := []string{}
 
 	q := `( interface_type_name ) @base`
-	query, err := sitter.NewQuery([]byte(q), lang)
+	query, err := sitter.NewQuery([]byte(q), golang.GetLanguage())
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +116,7 @@ func getBases(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language)
 }
 
 // returns the a list of the methods on an interface, given an inteface_type_node
-func getMethods(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Language) ([]method, error) {
+func getMethods(interfaceTypeNode *sitter.Node, src []byte) ([]method, error) {
 	methods := []method{}
 
 	q := `( method_spec
@@ -122,7 +125,7 @@ func getMethods(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Languag
 			result: (_)? @return
 		) @content
 		`
-	query, err := sitter.NewQuery([]byte(q), lang)
+	query, err := sitter.NewQuery([]byte(q), golang.GetLanguage())
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +154,7 @@ func getMethods(interfaceTypeNode *sitter.Node, src []byte, lang *sitter.Languag
 		}
 		hasReturnType := len(match.Captures) == 4
 		if hasReturnType {
+			// TODO
 			interfaceMethod.ReturnType = match.Captures[3].Node.Content(src)
 		}
 		methods = append(methods, interfaceMethod)
@@ -211,9 +215,9 @@ func isUpperCase(s string) bool {
 	return firstChar >= 'A' && firstChar <= 'Z'
 }
 
-func getRootNode(lang *sitter.Language, src []byte) (*sitter.Node, error) {
+func getRootNode(src []byte) (*sitter.Node, error) {
 	parser := sitter.NewParser()
-	parser.SetLanguage(lang)
+	parser.SetLanguage(golang.GetLanguage())
 	tree, err := parser.ParseCtx(context.Background(), nil, src)
 	if err != nil {
 		return nil, err
@@ -221,11 +225,17 @@ func getRootNode(lang *sitter.Language, src []byte) (*sitter.Node, error) {
 	return tree.RootNode(), nil
 }
 
-func getPackageName(root *sitter.Node, src []byte, lang *sitter.Language) (string, error) {
+// returns the name of the package given the bytes of a file. returns an error if package name is not found
+func getPackageName(src []byte) (string, error) {
+	root, err := getRootNode(src)
+	if err != nil {
+		return "", err
+	}
+
 	packageQ := `(package_clause 
 		(package_identifier) @id
 	)`
-	packageQuery, err := sitter.NewQuery([]byte(packageQ), lang)
+	packageQuery, err := sitter.NewQuery([]byte(packageQ), golang.GetLanguage())
 	if err != nil {
 		return "", err
 	}
