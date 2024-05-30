@@ -19,9 +19,14 @@ var dirToSearch *string
 func main() {
 	// search user-defined directory if provided or default go installation if not
 	dirToSearch = flag.String("path", GO_ROOT_DIR, "the file path to search for interfaces")
+	outputFilename := flag.String("output", "interfaces.json", "the file path for output")
 	flag.Parse()
 	var err error
 	*dirToSearch, err = filepath.Abs(*dirToSearch)
+	if err != nil {
+		panic(err)
+	}
+	*outputFilename, err = filepath.Abs(*outputFilename)
 	if err != nil {
 		panic(err)
 	}
@@ -50,13 +55,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	filename := "interfaces.json"
-	err = os.WriteFile(filename, data, 0666)
+	err = os.WriteFile(*outputFilename, data, 0666)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("successfully wrote data for %d interfaces to %s\n", len(interfaces), filename)
+	fmt.Printf("successfully wrote data for %d interfaces to %s\n", len(interfaces), *outputFilename)
 }
 
 func walkDirFn(allInterfaces chan parser.GoInterface, wg *sync.WaitGroup) fs.WalkDirFunc {
