@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"impl/types"
 	"io"
 	"os"
+	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/golang"
@@ -68,7 +70,7 @@ func getInterfaces(src []byte, filename string) ([]GoInterface, error) {
 		}
 
 		interfaceTypeN := m.Captures[1].Node
-		methods, err := getMethods(interfaceTypeN, src)
+		methods, err := getMethods(interfaceTypeN, packageName, src)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +118,7 @@ func getBases(interfaceTypeNode *sitter.Node, src []byte) ([]string, error) {
 }
 
 // returns the a list of the methods on an interface, given an inteface_type_node
-func getMethods(interfaceTypeNode *sitter.Node, src []byte) ([]method, error) {
+func getMethods(interfaceTypeNode *sitter.Node, packageName string, src []byte) ([]method, error) {
 	methods := []method{}
 
 	q := `( method_spec
@@ -141,26 +143,56 @@ func getMethods(interfaceTypeNode *sitter.Node, src []byte) ([]method, error) {
 		if !isUpperCase(methodName) {
 			continue
 		}
-		interfaceMethod := method{
+		m := method{
 			Content: match.Captures[0].Node.Content(src),
 			Name:    methodName,
-			Params:  []string{},
 		}
 
 		parametersN := match.Captures[2].Node
-		for i := range parametersN.NamedChildCount() {
-			param := parametersN.NamedChild(int(i)).Content(src)
-			interfaceMethod.Params = append(interfaceMethod.Params, param)
+		swaps, err := getParamSwaps(parametersN, packageName, src)
+		if err != nil {
+			return nil, err
 		}
+		for ogName, qualifiedName := range swaps {
+			m.Content = strings.Replace(m.Content, ogName, qualifiedName, -1)
+		}
+
 		hasReturnType := len(match.Captures) == 4
 		if hasReturnType {
 			// TODO
-			interfaceMethod.ReturnType = match.Captures[3].Node.Content(src)
+			m.ReturnType = match.Captures[3].Node.Content(src)
 		}
-		methods = append(methods, interfaceMethod)
+		methods = append(methods, m)
 	}
 
 	return methods, nil
+}
+
+func getParamSwaps(parametersN *sitter.Node, packageName string, src []byte) (map[string]string, error) {
+	paramTypes := make(map[string]string, 0)
+
+	q := `( type_identifier ) @t`
+	query, err := sitter.NewQuery([]byte(q), golang.GetLanguage())
+	if err != nil {
+		return nil, err
+	}
+	cursor := sitter.NewQueryCursor()
+	cursor.Exec(query, parametersN)
+	for {
+		match, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+		paramNode := match.Captures[0].Node
+
+		typeOfParam := paramNode.Content(src)
+		isQualified := paramNode.Parent().Type() == "qualified_type"
+		if !isQualified && !types.IsBuiltIn(typeOfParam) {
+			paramTypes[typeOfParam] = fmt.Sprintf("%s.%s", packageName, typeOfParam)
+		}
+	}
+
+	return paramTypes, nil
 }
 
 // removes the bases from interface at index idx and adds the associated methods to the base interface
@@ -193,10 +225,9 @@ type GoInterface struct {
 }
 
 type method struct {
-	Content    string   `json:"content"`
-	Name       string   `json:"name"`
-	Params     []string `json:"params"`
-	ReturnType string   `json:"return_type"`
+	Content    string `json:"content"`
+	Name       string `json:"name"`
+	ReturnType string `json:"return_type"`
 }
 
 func (g GoInterface) String() string {

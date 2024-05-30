@@ -146,7 +146,7 @@ type Doer interface {
 	}
 }
 
-func TestPackageQualifiersAreAdded(t *testing.T) {
+func TestPackageQualifiersAreAddedToParameters(t *testing.T) {
 	filename := "file.go"
 	var b bytes.Buffer
 	b.WriteString(`
@@ -155,18 +155,16 @@ package dog
 type Potato int
 
 type Doer interface {
-	DoStuff(Potato, string) Potato
+	DoStuff(p Potato, s string)
 }
 `)
 	interfaces, err := getInterfaces(b.Bytes(), filename)
 	if err != nil {
 		t.Fatal(err)
 	}
-	i := interfaces[0]
-	if i.Methods[0].Content != "DoStuff() dog.Potato" {
-		t.Fatalf(`Expected content to be "DoStuff() dog.Potato", got "%s"`, i.Methods[0].Content)
-	}
-	if i.Methods[0].ReturnType != "dog.Potato" {
-		t.Fatalf(`Expected return type to be "dog.Potato", got "%s"`, i.Methods[0].ReturnType)
+	m := interfaces[0].Methods[0]
+	expected := "DoStuff(p dog.Potato, s string)"
+	if m.Content != expected {
+		t.Fatalf("expected %s, got %s", expected, m.Content)
 	}
 }

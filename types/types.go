@@ -1,6 +1,10 @@
 package types
 
 func IsBuiltIn(t string) bool {
+	if t[0] == '*' {
+		t = t[1:]
+	}
+
 	builtins := []string{
 		"string",
 		"bool",
