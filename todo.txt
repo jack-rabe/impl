@@ -9,6 +9,7 @@
 ? do i have to worry about pointer receivers??? (i think so)
 ? add map to make parent access more efficient
 ? remind to install json parser with luarocks???
+? investigate Visitor (named return types?)
 ? investigate Ordered interface 
 ? inheritance from private interfaces?
 {

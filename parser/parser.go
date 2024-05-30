@@ -149,7 +149,7 @@ func getMethods(interfaceTypeNode *sitter.Node, packageName string, src []byte) 
 		}
 
 		parametersN := match.Captures[2].Node
-		swaps, err := getParamSwaps(parametersN, packageName, src)
+		swaps, err := getQualifierSwaps(parametersN, packageName, src)
 		if err != nil {
 			return nil, err
 		}
@@ -159,16 +159,29 @@ func getMethods(interfaceTypeNode *sitter.Node, packageName string, src []byte) 
 
 		hasReturnType := len(match.Captures) == 4
 		if hasReturnType {
-			// TODO
-			m.ReturnType = match.Captures[3].Node.Content(src)
+			returnNode := match.Captures[3].Node
+			swaps, err := getQualifierSwaps(returnNode, packageName, src)
+			if err != nil {
+				return nil, err
+			}
+			if returnNode.Type() == "type_identifier" {
+				addUnqualifiedIDToSwaps(returnNode, packageName, src, swaps)
+			}
+			m.ReturnType = returnNode.Content(src)
+
+			for ogName, qualifiedName := range swaps {
+				m.Content = strings.Replace(m.Content, ogName, qualifiedName, -1)
+				m.ReturnType = strings.Replace(m.ReturnType, ogName, qualifiedName, -1)
+			}
 		}
+
 		methods = append(methods, m)
 	}
 
 	return methods, nil
 }
 
-func getParamSwaps(parametersN *sitter.Node, packageName string, src []byte) (map[string]string, error) {
+func getQualifierSwaps(parametersN *sitter.Node, packageName string, src []byte) (map[string]string, error) {
 	paramTypes := make(map[string]string, 0)
 
 	q := `( type_identifier ) @t`
@@ -183,16 +196,20 @@ func getParamSwaps(parametersN *sitter.Node, packageName string, src []byte) (ma
 		if !ok {
 			break
 		}
-		paramNode := match.Captures[0].Node
 
-		typeOfParam := paramNode.Content(src)
-		isQualified := paramNode.Parent().Type() == "qualified_type"
-		if !isQualified && !types.IsBuiltIn(typeOfParam) {
-			paramTypes[typeOfParam] = fmt.Sprintf("%s.%s", packageName, typeOfParam)
-		}
+		paramNode := match.Captures[0].Node
+		addUnqualifiedIDToSwaps(paramNode, packageName, src, paramTypes)
 	}
 
 	return paramTypes, nil
+}
+
+func addUnqualifiedIDToSwaps(n *sitter.Node, packageName string, src []byte, swaps map[string]string) {
+	typeOfParam := n.Content(src)
+	isQualified := n.Parent().Type() == "qualified_type"
+	if !isQualified && !types.IsBuiltIn(typeOfParam) {
+		swaps[typeOfParam] = fmt.Sprintf("%s.%s", packageName, typeOfParam)
+	}
 }
 
 // removes the bases from interface at index idx and adds the associated methods to the base interface
