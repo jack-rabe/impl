@@ -1,4 +1,4 @@
-module impl
+module github.com/jack-rabe/impl
 
 go 1.22.1
 
