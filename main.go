@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const GO_ROOT_DIR = "/usr/local/go/src"
@@ -27,11 +28,21 @@ func main() {
 
 	fmt.Printf("searching %s for interfaces...\n", *dirToSearch)
 
-	// collect data for all interfaces within the directory
+	// collect data for all interfaceChan within the directory
+	interfaceChan := make(chan parser.GoInterface)
 	interfaces := make([]parser.GoInterface, 0)
-	err = filepath.WalkDir(*dirToSearch, walkDirFn(&interfaces))
+	var wg sync.WaitGroup
+	err = filepath.WalkDir(*dirToSearch, walkDirFn(interfaceChan, &wg))
 	if err != nil {
 		panic(err)
+	}
+
+	go func() {
+		wg.Wait()
+		close(interfaceChan)
+	}()
+	for iface := range interfaceChan {
+		interfaces = append(interfaces, iface)
 	}
 
 	// marshal data and write to disk
@@ -48,7 +59,7 @@ func main() {
 	fmt.Printf("successfully wrote data for %d interfaces to %s\n", len(interfaces), filename)
 }
 
-func walkDirFn(allInterfaces *[]parser.GoInterface) fs.WalkDirFunc {
+func walkDirFn(allInterfaces chan parser.GoInterface, wg *sync.WaitGroup) fs.WalkDirFunc {
 	return func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			panic(err)
@@ -63,17 +74,25 @@ func walkDirFn(allInterfaces *[]parser.GoInterface) fs.WalkDirFunc {
 		}
 
 		// if it is a go file, check for interfaces to add
-		if strings.Contains(path, ".go") {
-			interfaces, err := parser.GetInterfaces(path, len(*dirToSearch)+1)
-			if err != nil {
-				return nil
-			}
+		wg.Add(1)
+		go func() {
+			addInterfacesFromFile(path, allInterfaces)
+			wg.Done()
+		}()
 
-			if len(interfaces) > 0 {
-				*allInterfaces = append(*allInterfaces, interfaces...)
-			}
-			return nil
-		}
 		return nil
+	}
+}
+
+func addInterfacesFromFile(path string, allInterfaces chan parser.GoInterface) {
+	if strings.Contains(path, ".go") {
+		interfaces, err := parser.GetInterfaces(path, len(*dirToSearch)+1)
+		if err != nil {
+			return
+		}
+
+		for _, iface := range interfaces {
+			allInterfaces <- iface
+		}
 	}
 }
