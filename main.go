@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"impl/parser"
 	"io/fs"
@@ -12,12 +13,23 @@ import (
 
 const GO_ROOT_DIR = "/usr/local/go/src"
 
-func main() {
-	fmt.Printf("searching %s for interfaces...\n", GO_ROOT_DIR)
+var dirToSearch *string
 
-	// collect data for all standard library interfaces
+func main() {
+	// search user-defined directory if provided or default go installation if not
+	dirToSearch = flag.String("path", GO_ROOT_DIR, "the file path to search for interfaces")
+	flag.Parse()
+	var err error
+	*dirToSearch, err = filepath.Abs(*dirToSearch)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("searching %s for interfaces...\n", *dirToSearch)
+
+	// collect data for all interfaces within the directory
 	interfaces := make([]parser.GoInterface, 0)
-	err := filepath.WalkDir(GO_ROOT_DIR, walkDirFn(&interfaces))
+	err = filepath.WalkDir(*dirToSearch, walkDirFn(&interfaces))
 	if err != nil {
 		panic(err)
 	}
@@ -52,7 +64,7 @@ func walkDirFn(allInterfaces *[]parser.GoInterface) fs.WalkDirFunc {
 
 		// if it is a go file, check for interfaces to add
 		if strings.Contains(path, ".go") {
-			interfaces, err := parser.GetInterfaces(path, len(GO_ROOT_DIR))
+			interfaces, err := parser.GetInterfaces(path, len(*dirToSearch)+1)
 			if err != nil {
 				return nil
 			}
