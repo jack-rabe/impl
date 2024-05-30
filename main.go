@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"impl/parser"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/jack-rabe/impl/parser"
 )
 
 const GO_ROOT_DIR = "/usr/local/go/src"

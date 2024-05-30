@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"impl/types"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/jack-rabe/impl/types"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/golang"
